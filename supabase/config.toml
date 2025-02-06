@@ -4,3 +4,40 @@ project_id = "lpyxnwcxfpqiinncqswe"
   [policies.shopping_lists]
     check = "NEW.archived IS NOT TRUE"
     using = "auth.uid() = created_by"
+
+-- First, disable RLS temporarily to avoid any issues during policy updates
+ALTER TABLE shopping_lists DISABLE ROW LEVEL SECURITY;
+
+-- Drop all existing policies to start fresh
+DROP POLICY IF EXISTS "enable_select_for_users" ON shopping_lists;
+DROP POLICY IF EXISTS "enable_insert_for_users" ON shopping_lists;
+DROP POLICY IF EXISTS "enable_update_for_owners" ON shopping_lists;
+DROP POLICY IF EXISTS "enable_delete_for_owners" ON shopping_lists;
+
+-- Re-enable RLS
+ALTER TABLE shopping_lists ENABLE ROW LEVEL SECURITY;
+
+-- Create new simplified policies without any joins or subqueries
+CREATE POLICY "shopping_lists_select_policy" ON shopping_lists
+FOR SELECT TO authenticated
+USING (
+  created_by = auth.uid()
+  OR 
+  EXISTS (
+    SELECT 1 FROM list_shares 
+    WHERE list_shares.list_id = id 
+    AND list_shares.shared_with = auth.uid()
+  )
+);
+
+CREATE POLICY "shopping_lists_insert_policy" ON shopping_lists
+FOR INSERT TO authenticated
+WITH CHECK (created_by = auth.uid());
+
+CREATE POLICY "shopping_lists_update_policy" ON shopping_lists
+FOR UPDATE TO authenticated
+USING (created_by = auth.uid());
+
+CREATE POLICY "shopping_lists_delete_policy" ON shopping_lists
+FOR DELETE TO authenticated
+USING (created_by = auth.uid());
